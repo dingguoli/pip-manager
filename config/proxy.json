@@ -1,0 +1,9 @@
+{
+  "enabled": true,
+  "type": "HTTP",
+  "host": "127.0.0.1",
+  "port": 7890,
+  "auth_enabled": false,
+  "username": "",
+  "password": ""
+}

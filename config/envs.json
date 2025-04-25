@@ -1,0 +1,12 @@
+{
+  "test": {
+    "path": "C:/Users/Administrator/Desktop/测试\\test",
+    "description": "",
+    "created_at": "2025-04-24 16:21:18"
+  },
+  "测试2": {
+    "path": "C:\\Users\\Administrator\\Desktop\\20250423_111757\\refactored_project\\envs\\测试2",
+    "description": "从 C:/Users/Administrator/Desktop/python/venv_测试2 导入",
+    "created_at": "2025-04-24 16:24:32"
+  }
+}
