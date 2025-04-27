@@ -5,6 +5,7 @@ import logging
 import requests
 from typing import Dict, List, Optional, Tuple
 from PyQt5.QtCore import QObject, pyqtSignal
+from src.core.config_manager import ConfigManager
 
 class MirrorManager(QObject):
     """镜像源管理器核心类"""
@@ -28,9 +29,9 @@ class MirrorManager(QObject):
     speed_test_finished = pyqtSignal(list)  # 测速完成信号
     operation_error = pyqtSignal(str)  # 操作错误信号
     
-    def __init__(self, config_file: str):
+    def __init__(self, config_manager: ConfigManager):
         super().__init__()
-        self.config_file = config_file
+        self.config_manager = config_manager
         self.mirrors: Dict[str, str] = {}
         self.current_mirror: Optional[Tuple[str, str]] = None
         self.load_mirrors()
@@ -38,15 +39,14 @@ class MirrorManager(QObject):
     def load_mirrors(self) -> None:
         """加载镜像源配置"""
         try:
-            if os.path.exists(self.config_file):
-                with open(self.config_file, 'r', encoding='utf-8') as f:
-                    config = json.load(f)
-                    self.mirrors = config.get('mirrors', {})
-                    current = config.get('current', None)
-                    if current == self.OFFICIAL_MIRROR[0]:
-                        self.current_mirror = self.OFFICIAL_MIRROR
-                    elif current and current in self.mirrors:
-                        self.current_mirror = (current, self.mirrors[current])
+            config = self.config_manager.load_config('mirror')
+            if config:
+                self.mirrors = config.get('mirrors', {})
+                current = config.get('current', None)
+                if current == self.OFFICIAL_MIRROR[0]:
+                    self.current_mirror = self.OFFICIAL_MIRROR
+                elif current and current in self.mirrors:
+                    self.current_mirror = (current, self.mirrors[current])
             
             # 如果没有镜像源，添加默认镜像源
             if not self.mirrors:
@@ -68,8 +68,7 @@ class MirrorManager(QObject):
                 'mirrors': self.mirrors,
                 'current': self.current_mirror[0] if self.current_mirror else None
             }
-            with open(self.config_file, 'w', encoding='utf-8') as f:
-                json.dump(config, f, ensure_ascii=False, indent=2)
+            self.config_manager.save_config('mirror', config)
         except Exception as e:
             logging.error(f"保存镜像源配置时出错: {str(e)}")
             

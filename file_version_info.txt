@@ -11,18 +11,18 @@ VSVersionInfo(
     date=(0, 0)
   ),
   kids=[
-    StringFileInfo(
-      [
-        StringTable(
-          u'080404b0',
-          [StringStruct(u'CompanyName', u''),
-           StringStruct(u'FileDescription', u'Package Manager'),
-           StringStruct(u'FileVersion', u'1.0.0'),
-           StringStruct(u'InternalName', u'PackageManager'),
-           StringStruct(u'LegalCopyright', u''),
-           StringStruct(u'OriginalFilename', u'PackageManager.exe'),
-           StringStruct(u'ProductName', u'Package Manager'),
-           StringStruct(u'ProductVersion', u'1.0.0')])
-      ])
+    StringFileInfo([
+      StringTable(
+        u'080404b0',
+        [StringStruct(u'CompanyName', u''),
+         StringStruct(u'FileDescription', u'Python包管理器'),
+         StringStruct(u'FileVersion', u'1.0.0'),
+         StringStruct(u'InternalName', u'PackageManager'),
+         StringStruct(u'LegalCopyright', u'Copyright (C) 2024'),
+         StringStruct(u'OriginalFilename', u'PackageManager.exe'),
+         StringStruct(u'ProductName', u'Python包管理器'),
+         StringStruct(u'ProductVersion', u'1.0.0')])
+    ]),
+    VarFileInfo([VarStruct(u'Translation', [2052, 1200])])
   ]
 )

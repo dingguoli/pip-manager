@@ -1,122 +1,178 @@
 import os
 import sys
 import shutil
-import datetime
 import subprocess
-from pathlib import Path
+import logging
+from datetime import datetime
 
-def create_source_backup():
-    """创建源代码备份"""
-    print("正在创建源代码备份...")
+def setup_logging():
+    """配置日志"""
+    log_dir = "logs"
+    os.makedirs(log_dir, exist_ok=True)
     
-    # 获取当前时间戳
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_name = f"package_manager_source_{timestamp}"
+    log_file = os.path.join(log_dir, f"build_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
     
-    # 要包含的目录和文件
-    include_paths = [
-        "src",
-        "config",
-        "requirements.txt",
-        "README.md",
-        "run.bat",
-        "run.sh",
-        ".gitignore"
-    ]
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(log_file, encoding='utf-8'),
+            logging.StreamHandler()
+        ]
+    )
     
-    # 创建临时目录
-    if not os.path.exists("dist"):
-        os.makedirs("dist")
-    
-    backup_dir = os.path.join("dist", backup_name)
-    os.makedirs(backup_dir)
-    
-    # 复制文件和目录
-    for path in include_paths:
-        if os.path.isdir(path):
-            shutil.copytree(path, os.path.join(backup_dir, path))
-        elif os.path.isfile(path):
-            shutil.copy2(path, backup_dir)
-    
-    # 创建zip文件
-    shutil.make_archive(os.path.join("dist", backup_name), 'zip', backup_dir)
-    
-    # 清理临时目录
-    shutil.rmtree(backup_dir)
-    
-    print(f"源代码备份已创建: dist/{backup_name}.zip")
+    return logging.getLogger("Builder")
 
-def create_executable():
-    """创建可执行文件"""
-    print("正在创建可执行文件...")
+def check_python_version():
+    """检查Python版本"""
+    logger = logging.getLogger("Builder")
+    version = sys.version_info
+    logger.info(f"Python版本: {version.major}.{version.minor}.{version.micro}")
     
-    # 确保dist目录存在
-    if not os.path.exists("dist"):
-        os.makedirs("dist")
+    if version.major != 3 or version.minor < 6:
+        raise RuntimeError("需要Python 3.6或更高版本")
+
+def install_dependencies(logger):
+    """安装必要的依赖"""
+    logger.info("正在安装必要的依赖...")
     
-    # 安装必要的依赖
-    print("正在安装必要的依赖...")
     dependencies = [
         "pyinstaller",
-        "pywin32",
         "pyqt5",
+        "pyqt5-tools",
         "requests"
     ]
     
     for dep in dependencies:
         try:
+            logger.info(f"正在安装 {dep}...")
             subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", dep])
-        except Exception as e:
-            print(f"警告: 安装 {dep} 时出错: {str(e)}")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"安装 {dep} 失败: {str(e)}")
+            raise
+
+def clean_build_directories(logger):
+    """清理构建目录"""
+    logger.info("正在清理构建目录...")
     
-    # 直接运行pyinstaller
-    print("正在打包应用程序...")
+    dirs_to_clean = ['build', 'dist']
+    for dir_name in dirs_to_clean:
+        if os.path.exists(dir_name):
+            try:
+                shutil.rmtree(dir_name)
+                logger.info(f"已删除 {dir_name} 目录")
+            except Exception as e:
+                logger.error(f"删除 {dir_name} 目录失败: {str(e)}")
+                raise
+
+def create_version_file(logger):
+    """创建版本信息文件"""
+    logger.info("正在创建版本信息文件...")
+    
+    version_info = '''
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=(1, 0, 0, 0),
+    prodvers=(1, 0, 0, 0),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo([
+      StringTable(
+        u'080404b0',
+        [StringStruct(u'CompanyName', u''),
+         StringStruct(u'FileDescription', u'Python包管理器'),
+         StringStruct(u'FileVersion', u'1.0.0'),
+         StringStruct(u'InternalName', u'PackageManager'),
+         StringStruct(u'LegalCopyright', u'Copyright (C) 2024'),
+         StringStruct(u'OriginalFilename', u'PackageManager.exe'),
+         StringStruct(u'ProductName', u'Python包管理器'),
+         StringStruct(u'ProductVersion', u'1.0.0')])
+    ]),
+    VarFileInfo([VarStruct(u'Translation', [2052, 1200])])
+  ]
+)
+'''
+    
     try:
-        # 清理旧的构建文件
-        if os.path.exists("build"):
-            shutil.rmtree("build")
-        if os.path.exists("dist"):
-            shutil.rmtree("dist")
-        
-        # 使用最基本的配置
-        subprocess.check_call([
-            sys.executable, 
-            "-m", 
-            "PyInstaller",
-            "src/main.py",
-            "--name=PackageManager",
-            "--onefile",
-            "--windowed"
-        ])
-        
-        print("可执行文件已创建: dist/PackageManager.exe")
-        print("提示：如果程序仍然无法运行，请尝试以下步骤：")
-        print("1. 确保系统已安装最新的Visual C++ Redistributable")
-        print("2. 检查是否有杀毒软件拦截")
-        print("3. 尝试以管理员身份运行程序")
-        
-    except subprocess.CalledProcessError as e:
-        print(f"打包过程出错: {str(e)}")
+        with open('file_version_info.txt', 'w', encoding='utf-8') as f:
+            f.write(version_info)
+        logger.info("版本信息文件创建成功")
+    except Exception as e:
+        logger.error(f"创建版本信息文件失败: {str(e)}")
         raise
 
-def main():
-    print("开始打包流程...")
+def run_pyinstaller(logger):
+    """运行PyInstaller打包"""
+    logger.info("正在运行PyInstaller打包...")
     
     try:
-        # 创建源代码备份
-        create_source_backup()
+        subprocess.check_call([
+            sys.executable,
+            "-m",
+            "PyInstaller",
+            "package_manager.spec",
+            "--clean"
+        ])
+        logger.info("PyInstaller打包完成")
+    except subprocess.CalledProcessError as e:
+        logger.error(f"PyInstaller打包失败: {str(e)}")
+        raise
+
+def verify_output(logger):
+    """验证输出文件"""
+    logger.info("正在验证输出文件...")
+    
+    exe_path = os.path.join('dist', 'PackageManager.exe')
+    if not os.path.exists(exe_path):
+        error_msg = f"输出文件不存在: {exe_path}"
+        logger.error(error_msg)
+        raise FileNotFoundError(error_msg)
         
-        # 创建可执行文件
-        create_executable()
+    logger.info(f"输出文件验证成功: {exe_path}")
+    return exe_path
+
+def main():
+    """主函数"""
+    try:
+        # 设置日志
+        logger = setup_logging()
+        logger.info("开始构建流程...")
         
-        print("\n打包完成！")
-        print("您可以在dist目录下找到以下文件：")
-        print("1. 源代码备份zip文件")
-        print("2. PackageManager.exe可执行文件")
+        # 检查Python版本
+        check_python_version()
+        
+        # 安装依赖
+        install_dependencies(logger)
+        
+        # 清理构建目录
+        clean_build_directories(logger)
+        
+        # 创建版本信息文件
+        create_version_file(logger)
+        
+        # 运行PyInstaller
+        run_pyinstaller(logger)
+        
+        # 验证输出
+        exe_path = verify_output(logger)
+        
+        logger.info("构建完成！")
+        logger.info(f"可执行文件位置: {exe_path}")
+        logger.info("\n提示：")
+        logger.info("1. 确保系统已安装最新的Visual C++ Redistributable")
+        logger.info("2. 如果启动时被杀毒软件拦截，请添加信任或白名单")
+        logger.info("3. 如果遇到权限问题，请尝试以管理员身份运行")
         
     except Exception as e:
-        print(f"打包过程中出错: {str(e)}")
+        logger = logging.getLogger("Builder")
+        logger.error(f"构建过程出错: {str(e)}")
         sys.exit(1)
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main() 

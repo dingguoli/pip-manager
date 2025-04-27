@@ -4,6 +4,7 @@ import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 from PyQt5.QtCore import QObject, pyqtSignal
+import json
 
 class PackageManager(QObject):
     """包管理器核心类"""
@@ -30,6 +31,34 @@ class PackageManager(QObject):
         self.env_name = env_name
         self.package_info: Dict[str, dict] = {}
         self._is_running = True
+        
+        # 初始化日志
+        self.logger = logging.getLogger(f"PipManager.PackageManager.{env_name}")
+        self.logger.info(f"初始化包管理器: python_path={python_path}, env_name={env_name}")
+        
+        # 验证Python解释器
+        if not os.path.exists(python_path):
+            error_msg = f"Python解释器不存在: {python_path}"
+            self.logger.error(error_msg)
+            raise ValueError(error_msg)
+            
+        # 测试Python解释器
+        try:
+            result = subprocess.run(
+                [python_path, "--version"],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode == 0:
+                self.logger.info(f"Python版本: {result.stdout.strip()}")
+            else:
+                error_msg = f"Python解释器测试失败: {result.stderr}"
+                self.logger.error(error_msg)
+                raise ValueError(error_msg)
+        except Exception as e:
+            error_msg = f"测试Python解释器时出错: {str(e)}"
+            self.logger.error(error_msg)
+            raise ValueError(error_msg)
         
     def install_package(self, package_name: str):
         """安装包
@@ -96,7 +125,6 @@ class PackageManager(QObject):
                 return
                 
             # 解析包信息
-            import json
             packages = json.loads(result.stdout)
             
             # 转换为字典格式
@@ -141,46 +169,99 @@ class PackageManager(QObject):
     def load_packages(self) -> None:
         """加载包列表"""
         try:
-            # 显示进度条
+            self.logger.info("开始加载包列表")
             self.progress_updated.emit(0)
             
             # 执行pip list命令
-            result = subprocess.run(
-                [self.python_path, '-m', 'pip', 'list', '--format=json'],
-                capture_output=True,
-                text=True
-            )
+            cmd = [self.python_path, '-m', 'pip', 'list', '--format=json']
+            self.logger.debug(f"执行命令: {' '.join(cmd)}")
             
-            # 更新进度
-            self.progress_updated.emit(100)
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            self.progress_updated.emit(25)
             
             if result.returncode != 0:
                 error_msg = f"获取包列表失败: {result.stderr}"
-                logging.error(error_msg)
+                self.logger.error(error_msg)
                 self.package_load_error.emit(error_msg)
                 return
                 
             # 解析包信息
-            import json
-            packages = json.loads(result.stdout)
-            
+            try:
+                packages = json.loads(result.stdout)
+                self.logger.info(f"找到 {len(packages)} 个包")
+            except json.JSONDecodeError as e:
+                error_msg = f"解析包列表失败: {str(e)}"
+                self.logger.error(error_msg)
+                self.package_load_error.emit(error_msg)
+                return
+                
             # 转换为字典格式
             package_info = {}
-            for pkg in packages:
+            total_packages = len(packages)
+            
+            for i, pkg in enumerate(packages):
+                if not self._is_running:
+                    self.logger.info("加载包列表被取消")
+                    return
+                    
                 name = pkg['name']
+                self.logger.debug(f"处理包 {name}")
+                
+                # 获取包详细信息
+                show_result = subprocess.run(
+                    [self.python_path, '-m', 'pip', 'show', name],
+                    capture_output=True,
+                    text=True
+                )
+                
+                location = ''
+                install_time = ''
+                
+                if show_result.returncode == 0:
+                    for line in show_result.stdout.split('\n'):
+                        if line.startswith('Location:'):
+                            location = line.split(':', 1)[1].strip()
+                            self.logger.debug(f"包 {name} 的位置: {location}")
+                            
+                            # 获取安装时间
+                            try:
+                                package_path = os.path.join(location, name)
+                                if os.path.exists(package_path):
+                                    timestamp = os.path.getctime(package_path)
+                                    install_time = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+                                    self.logger.debug(f"包 {name} 的安装时间: {install_time}")
+                                else:
+                                    # 尝试使用下划线替换连字符
+                                    package_path = os.path.join(location, name.replace('-', '_'))
+                                    if os.path.exists(package_path):
+                                        timestamp = os.path.getctime(package_path)
+                                        install_time = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
+                                        self.logger.debug(f"包 {name} 的安装时间: {install_time}")
+                            except Exception as e:
+                                self.logger.warning(f"获取包 {name} 安装时间失败: {str(e)}")
+                else:
+                    self.logger.warning(f"获取包 {name} 详细信息失败: {show_result.stderr}")
+                
                 package_info[name] = {
                     'version': pkg['version'],
-                    'location': pkg.get('location', ''),
-                    'install_time': '',  # TODO: 获取安装时间
-                    'requires': []  # TODO: 获取依赖
+                    'location': location,
+                    'install_time': install_time
                 }
                 
+                # 更新进度
+                progress = 25 + int((i + 1) / total_packages * 75)
+                self.progress_updated.emit(progress)
+            
+            self.logger.info("包列表加载完成")
             self.package_loaded.emit(package_info)
             
         except Exception as e:
             error_msg = f"加载包列表时出错: {str(e)}"
-            logging.error(error_msg)
+            self.logger.error(error_msg)
             self.package_load_error.emit(error_msg)
+            
+        finally:
+            self.progress_updated.emit(100)
             
     def _process_package(self, package: str, index: int, total: int) -> None:
         """处理单个包的信息"""

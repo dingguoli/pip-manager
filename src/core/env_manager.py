@@ -16,30 +16,46 @@ class EnvManager(QObject):
     env_imported = pyqtSignal(str)  # 环境导入完成信号
     operation_error = pyqtSignal(str)  # 操作错误信号
     
-    def __init__(self, app_dir: str):
+    def __init__(self, app_data_dir: str):
         """初始化环境管理器
         Args:
-            app_dir: 应用目录
+            app_data_dir: 应用数据目录
         """
         super().__init__()
-        self.app_dir = app_dir
-        self.envs_dir = os.path.join(app_dir, 'envs')
-        self.envs_config = os.path.join(app_dir, 'config', 'envs.json')
+        self.app_data_dir = app_data_dir
+        self.envs_dir = os.path.join(app_data_dir, 'envs')
+        self.envs_config = os.path.join(app_data_dir, 'config', 'envs.json')
         
-        # 创建必要的目录
-        os.makedirs(self.envs_dir, exist_ok=True)
-        os.makedirs(os.path.dirname(self.envs_config), exist_ok=True)
+        # 初始化日志
+        self.logger = logging.getLogger("PipManager.EnvManager")
         
-        # 加载环境配置
-        self.load_config()
-        
+        try:
+            # 创建必要的目录
+            os.makedirs(self.envs_dir, exist_ok=True)
+            os.makedirs(os.path.dirname(self.envs_config), exist_ok=True)
+            self.logger.info(f"创建目录成功: {self.envs_dir}, {os.path.dirname(self.envs_config)}")
+            
+            # 加载环境配置
+            self.load_config()
+            
+        except Exception as e:
+            self.logger.error(f"初始化环境管理器失败: {str(e)}")
+            raise
+            
     def load_config(self):
         """加载环境配置"""
-        if os.path.exists(self.envs_config):
-            with open(self.envs_config, 'r', encoding='utf-8') as f:
-                self.envs = json.load(f)
-        else:
+        try:
+            if os.path.exists(self.envs_config):
+                with open(self.envs_config, 'r', encoding='utf-8') as f:
+                    self.envs = json.load(f)
+                self.logger.info(f"加载环境配置成功: {len(self.envs)} 个环境")
+            else:
+                self.envs = {}
+                self.logger.info("环境配置文件不存在，使用空配置")
+        except Exception as e:
+            self.logger.error(f"加载环境配置失败: {str(e)}")
             self.envs = {}
+            raise
             
     def save_config(self):
         """保存环境配置"""
@@ -97,21 +113,55 @@ class EnvManager(QObject):
         Returns:
             str: Python路径
         """
-        env_info = self.envs.get(env_name)
-        if not env_info:
+        try:
+            env_info = self.envs.get(env_name)
+            if not env_info:
+                error_msg = f"环境 {env_name} 不存在"
+                self.logger.error(error_msg)
+                self.operation_error.emit(error_msg)
+                return None
+                
+            path = env_info.get('path')
+            if not path:
+                error_msg = f"环境 {env_name} 的路径未设置"
+                self.logger.error(error_msg)
+                self.operation_error.emit(error_msg)
+                return None
+                
+            self.logger.info(f"正在检查环境 {env_name} 的Python解释器")
+            
+            # 获取环境中的Python解释器路径
+            possible_paths = []
+            if os.name == 'nt':
+                possible_paths = [
+                    os.path.join(path, 'Scripts', 'python.exe'),
+                    os.path.join(path, 'python.exe'),
+                    os.path.join(path, 'bin', 'python.exe')
+                ]
+            else:
+                possible_paths = [
+                    os.path.join(path, 'bin', 'python'),
+                    os.path.join(path, 'python')
+                ]
+            
+            # 检查所有可能的路径
+            for python_path in possible_paths:
+                if os.path.exists(python_path):
+                    self.logger.info(f"找到Python解释器: {python_path}")
+                    return python_path
+                else:
+                    self.logger.debug(f"路径不存在: {python_path}")
+                
+            error_msg = f"在环境 {env_name} 中未找到Python解释器，已检查路径: {', '.join(possible_paths)}"
+            self.logger.error(error_msg)
+            self.operation_error.emit(error_msg)
             return None
             
-        path = env_info.get('path')
-        if not path:
+        except Exception as e:
+            error_msg = f"获取环境 {env_name} 的Python路径时出错: {str(e)}"
+            self.logger.error(error_msg)
+            self.operation_error.emit(error_msg)
             return None
-            
-        # 获取环境中的Python解释器路径
-        if os.name == 'nt':
-            python_path = os.path.join(path, 'Scripts', 'python.exe')
-        else:
-            python_path = os.path.join(path, 'bin', 'python')
-            
-        return python_path if os.path.exists(python_path) else None
         
     def create_env(self, env_name: str, path: str, description: str = "") -> bool:
         """创建环境

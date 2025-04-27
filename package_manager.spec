@@ -1,45 +1,49 @@
 # -*- mode: python ; coding: utf-8 -*-
 import sys
+import os
 from PyInstaller.utils.hooks import collect_all
 
 block_cipher = None
 
-# 收集所有需要的数据文件和依赖
+# 收集所有必要的数据文件
 datas = [
     ('src/ui', 'src/ui'),
     ('src/core', 'src/core'),
     ('config', 'config'),
+    ('resources', 'resources'),
     ('README.md', '.'),
+    ('requirements.txt', '.'),
 ]
 
-# 收集PyQt5相关文件
-qt_binaries = []
-qt_datas = []
-hiddenimports = ['PyQt5.sip']
-
-# 添加额外的隐藏导入
-additional_imports = [
+# 收集所有必要的隐藏导入
+hiddenimports = [
+    'PyQt5.sip',
     'PyQt5.QtCore',
     'PyQt5.QtGui',
     'PyQt5.QtWidgets',
-    'win32api',
-    'win32con',
-    'win32gui',
-    'requests',
+    'json',
+    'logging',
+    'datetime',
+    'subprocess',
+    'os',
+    'sys',
+    'pathlib',
+    'typing',
+    'shutil',
+    'cairo',
 ]
-hiddenimports.extend(additional_imports)
 
 # 为每个PyQt5模块收集数据
-for pkg in ['PyQt5.QtCore', 'PyQt5.QtGui', 'PyQt5.QtWidgets']:
-    collect_result = collect_all(pkg)
+qt_modules = ['PyQt5.QtCore', 'PyQt5.QtGui', 'PyQt5.QtWidgets']
+for module in qt_modules:
+    collect_result = collect_all(module)
     datas.extend(collect_result[0])
-    binaries = collect_result[1]
     hiddenimports.extend(collect_result[2])
 
 a = Analysis(
     ['src/main.py'],
     pathex=[],
-    binaries=binaries,
+    binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
@@ -52,18 +56,17 @@ a = Analysis(
     noarchive=False,
 )
 
-# 过滤重复的DLL
-def remove_dup_binaries(binaries):
+# 过滤重复的二进制文件
+def remove_duplicate_binaries(binaries):
     seen = set()
     filtered = []
     for binary in binaries:
-        name = os.path.basename(binary[0]).lower()
-        if name not in seen:
-            seen.add(name)
+        if binary[0] not in seen:
+            seen.add(binary[0])
             filtered.append(binary)
     return filtered
 
-a.binaries = remove_dup_binaries(a.binaries)
+a.binaries = remove_duplicate_binaries(a.binaries)
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
@@ -81,11 +84,11 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=True,  # 临时设置为True以查看错误信息
+    console=True,
     disable_windowed_traceback=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='src/ui/resources/icon.ico',
-    version='file_version_info.txt'
+    icon='resources/app_icon_large.png',
+    version='file_version_info.txt',
 )

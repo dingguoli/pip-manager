@@ -25,114 +25,144 @@ from src.ui.dialogs.theme_dialog import ThemeDialog
 class MainWindow(QMainWindow):
     """主窗口类"""
     
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Python包管理器")
-        self.setMinimumSize(800, 600)
-        
-        # 初始化管理器
-        self.init_managers()
-        
-        # 初始化UI
-        self.init_ui()
-        
-        # 延迟初始化
-        QTimer.singleShot(0, self.delayed_init)
+    def __init__(self, config_manager: ConfigManager):
+        """初始化主窗口"""
+        try:
+            super().__init__()
+            self.setWindowTitle("Python包管理器")
+            self.setMinimumSize(800, 600)
+            
+            # 初始化日志
+            self.logger = logging.getLogger("PipManager.MainWindow")
+            self.logger.info("初始化主窗口")
+            
+            # 保存配置管理器实例
+            self.config_manager = config_manager
+            
+            # 初始化管理器（在UI之前）
+            self.init_managers()
+            
+            # 初始化UI
+            self.setup_ui()
+            
+            # 加载设置
+            self.load_settings()
+            
+            # 刷新环境列表
+            self.refresh_env_list()
+            
+            self.logger.info("主窗口初始化完成")
+            
+        except Exception as e:
+            self.logger.error(f"主窗口创建失败: {str(e)}")
+            raise
         
     def init_managers(self):
         """初始化各个管理器"""
-        # 获取应用目录
-        app_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        try:
+            # 获取应用数据目录
+            app_data = os.path.join(os.environ['APPDATA'], 'PipManager') if os.name == 'nt' else os.path.join(os.path.expanduser('~'), '.pipmanager')
         
-        # 初始化配置管理器
-        config_dir = os.path.join(app_dir, 'config')
-        self.config_manager = ConfigManager(config_dir)
+            # 初始化环境管理器
+            self.env_manager = EnvManager(app_data)
+            self.logger.info("环境管理器初始化完成")
         
-        # 初始化环境管理器
-        self.env_manager = EnvManager(app_dir)
+            # 初始化镜像源管理器
+            self.mirror_manager = MirrorManager(self.config_manager)
+            self.logger.info("镜像源管理器初始化完成")
         
-        # 初始化镜像源管理器
-        mirror_config = os.path.join(config_dir, 'mirrors.json')
-        self.mirror_manager = MirrorManager(mirror_config)
+            # 初始化包管理器
+            self.package_manager = None  # 将在选择环境后初始化
         
-        # 初始化包管理器
-        self.package_manager = None  # 将在选择环境后初始化
+        except Exception as e:
+            self.logger.error(f"初始化管理器时出错: {str(e)}")
+            raise
         
-    def init_ui(self):
+    def setup_ui(self):
         """初始化UI"""
-        # 创建中央部件
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        
-        # 创建主布局
-        main_layout = QVBoxLayout(central_widget)
-        
-        # 创建工具栏
-        self.create_toolbar()
-        
-        # 创建环境选择区域
-        self.create_env_section(main_layout)
-        
-        # 创建包列表区域
-        self.create_package_section(main_layout)
-        
-        # 创建状态栏
-        self.statusBar = QStatusBar()
-        self.setStatusBar(self.statusBar)
+        try:
+            # 创建中央部件
+            central_widget = QWidget()
+            self.setCentralWidget(central_widget)
+            
+            # 创建主布局
+            main_layout = QVBoxLayout(central_widget)
+            
+            # 创建工具栏
+            self.create_toolbar()
+            
+            # 创建环境选择区域
+            self.create_env_section(main_layout)
+            
+            # 创建包列表区域
+            self.create_package_section(main_layout)
+            
+            # 创建状态栏
+            self.statusBar = QStatusBar()
+            self.setStatusBar(self.statusBar)
+            
+        except Exception as e:
+            self.logger.error(f"初始化UI时出错: {str(e)}")
+            raise
         
     def create_toolbar(self):
         """创建工具栏"""
-        toolbar = QToolBar()
-        self.addToolBar(toolbar)
-        
-        # 添加环境操作按钮
-        env_menu = QMenu()
-        env_menu.addAction("创建环境", self.create_env)
-        env_menu.addAction("导入环境", self.import_env)
-        env_menu.addAction("删除环境", self.delete_env)
-        
-        env_btn = QPushButton("环境")
-        env_btn.setMenu(env_menu)
-        toolbar.addWidget(env_btn)
-        
-        # 添加包操作按钮
-        package_menu = QMenu()
-        package_menu.addAction("安装包", self.install_package)
-        package_menu.addAction("卸载包", self.uninstall_package)
-        package_menu.addAction("更新包", self.upgrade_package)
-        package_menu.addAction("导出requirements", self.export_requirements)
-        package_menu.addAction("导入requirements", self.import_requirements)
-        
-        package_btn = QPushButton("包")
-        package_btn.setMenu(package_menu)
-        toolbar.addWidget(package_btn)
-        
-        # 添加镜像源操作按钮
-        mirror_menu = QMenu()
-        
-        # 创建切换镜像源子菜单
-        self.switch_mirror_menu = QMenu("切换镜像源")
-        self.update_mirror_menu()  # 更新镜像源列表
-        mirror_menu.addMenu(self.switch_mirror_menu)
-        
-        mirror_menu.addSeparator()
-        mirror_menu.addAction("添加镜像源", self.add_mirror)
-        mirror_menu.addAction("删除镜像源", self.remove_mirror)
-        mirror_menu.addAction("测试速度", self.test_mirror_speed)
-        mirror_menu.addAction("重置为默认", self.reset_mirror)
-        
-        mirror_btn = QPushButton("镜像源")
-        mirror_btn.setMenu(mirror_menu)
-        toolbar.addWidget(mirror_btn)
-        
-        # 添加设置按钮
-        settings_menu = QMenu()
-        settings_menu.addAction("代理设置", self.configure_proxy)
-        settings_menu.addAction("主题设置", self.configure_theme)
-        
-        settings_btn = QPushButton("设置")
-        settings_btn.setMenu(settings_menu)
-        toolbar.addWidget(settings_btn)
+        try:
+            toolbar = QToolBar()
+            self.addToolBar(toolbar)
+            
+            # 添加环境操作按钮
+            env_menu = QMenu()
+            env_menu.addAction("创建环境", self.create_env)
+            env_menu.addAction("导入环境", self.import_env)
+            env_menu.addAction("删除环境", self.delete_env)
+            
+            env_btn = QPushButton("环境")
+            env_btn.setMenu(env_menu)
+            toolbar.addWidget(env_btn)
+            
+            # 添加包操作按钮
+            package_menu = QMenu()
+            package_menu.addAction("安装包", self.install_package)
+            package_menu.addAction("卸载包", self.uninstall_package)
+            package_menu.addAction("更新包", self.upgrade_package)
+            package_menu.addAction("导出requirements", self.export_requirements)
+            package_menu.addAction("导入requirements", self.import_requirements)
+            
+            package_btn = QPushButton("包")
+            package_btn.setMenu(package_menu)
+            toolbar.addWidget(package_btn)
+            
+            # 添加镜像源操作按钮
+            mirror_menu = QMenu()
+            
+            # 创建切换镜像源子菜单
+            self.switch_mirror_menu = QMenu("切换镜像源")
+            self.update_mirror_menu()  # 更新镜像源列表
+            mirror_menu.addMenu(self.switch_mirror_menu)
+            
+            mirror_menu.addSeparator()
+            mirror_menu.addAction("添加镜像源", self.add_mirror)
+            mirror_menu.addAction("删除镜像源", self.remove_mirror)
+            mirror_menu.addAction("测试速度", self.test_mirror_speed)
+            mirror_menu.addAction("重置为默认", self.reset_mirror)
+            
+            mirror_btn = QPushButton("镜像源")
+            mirror_btn.setMenu(mirror_menu)
+            toolbar.addWidget(mirror_btn)
+            
+            # 添加设置按钮
+            settings_menu = QMenu()
+            settings_menu.addAction("代理设置", self.configure_proxy)
+            settings_menu.addAction("主题设置", self.configure_theme)
+            
+            settings_btn = QPushButton("设置")
+            settings_btn.setMenu(settings_menu)
+            toolbar.addWidget(settings_btn)
+            
+        except Exception as e:
+            self.logger.error(f"创建工具栏时出错: {str(e)}")
+            raise
         
     def create_env_section(self, parent_layout):
         """创建环境选择区域"""
@@ -254,18 +284,45 @@ class MainWindow(QMainWindow):
             proxy_config = self.config_manager.load_config('proxy')
             if proxy_config:
                 self.apply_proxy_settings(proxy_config)
-                
+            
             # 加载主题设置
             theme_config = self.config_manager.load_config('theme')
-            if not theme_config:  # 如果没有主题配置，使用默认浅色主题
-                theme_config = ThemeDialog.PREDEFINED_THEMES["浅色"]
-            self.apply_theme(theme_config)
-            
+            if theme_config:
+                self.apply_theme(theme_config)
+            else:
+                # 使用默认浅色主题
+                self.apply_theme(ThemeDialog.PREDEFINED_THEMES["浅色"])
+                
         except Exception as e:
-            logging.error(f"加载设置时出错: {str(e)}")
+            self.logger.error(f"加载设置时出错: {str(e)}")
             # 使用默认主题
             self.apply_theme(ThemeDialog.PREDEFINED_THEMES["浅色"])
+    
+    def save_settings(self):
+        """保存设置"""
+        try:
+            # 保存当前设置
+            settings = {
+                "theme": self.current_theme,
+                "language": self.current_language,
+                "auto_update": self.auto_update_enabled
+            }
+            self.config_manager.save_config("settings", settings)
             
+        except Exception as e:
+            self.logger.error(f"保存设置时出错: {str(e)}")
+            self.add_notification("保存设置失败", "error")
+    
+    def closeEvent(self, event):
+        """窗口关闭事件"""
+        try:
+            # 保存所有设置
+            self.save_settings()
+            event.accept()
+        except Exception as e:
+            self.logger.error(f"关闭窗口时出错: {str(e)}")
+            event.accept()
+        
     def refresh_env_list(self):
         """刷新环境列表"""
         self.env_combo.clear()
