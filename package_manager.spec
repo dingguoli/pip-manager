@@ -9,7 +9,6 @@ block_cipher = None
 datas = [
     ('src/ui', 'src/ui'),
     ('src/core', 'src/core'),
-    ('config', 'config'),
     ('resources', 'resources'),
     ('README.md', '.'),
     ('requirements.txt', '.'),

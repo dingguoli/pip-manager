@@ -1,7 +1,0 @@
-{
-    "theme": "light",
-    "language": "zh_CN",
-    "auto_update": true,
-    "proxy": "",
-    "pip_index_url": "https://pypi.org/simple"
-}
